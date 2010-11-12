@@ -2,6 +2,7 @@ $:.unshift(File.dirname(__FILE__)) unless
 $:.include?(File.dirname(__FILE__)) || $:.include?(File.expand_path(File.dirname(__FILE__)))
 
 require 'net/http'
+require 'net/https'
 require 'uri'
 require 'rubygems'
 require 'json'
@@ -25,6 +26,7 @@ class TwitterStream
     'sample' => URI.parse("http://stream.twitter.com/1/statuses/sample.json"),
     'filter' => URI.parse("http://stream.twitter.com/1/statuses/filter.json"),
     'chirpuserstreams' => URI.parse('http://betastream.twitter.com/2b/user.json'),
+    'userstreams' => URI.parse('https://userstream.twitter.com/2/user.json'),
   }
   
   def initialize(params={ })
@@ -82,6 +84,13 @@ class TwitterStream
       yield status
     end
   end
+
+  def userstreams(params=nil)
+    raise ArgumentError, "params is not hash" unless params.nil? || params.kind_of?(Hash)
+    start_stream('userstreams', params) do |status|
+      yield status
+    end
+  end
   
   private
   
@@ -101,7 +110,13 @@ class TwitterStream
       end
     end
     
-    http = Net::HTTP.start(uri.host, uri.port)
+    http = Net::HTTP.new(uri.host, uri.port)
+    if uri.scheme == 'https'
+        http.use_ssl = true
+        http.ca_file = '/etc/pki/tls/cert.pem'
+        http.verify_mode = OpenSSL::SSL::VERIFY_PEER
+        http.verify_depth = 5
+    end
     request = Net::HTTP::Post.new(uri.request_uri)
     request.set_form_data(params) if params
     if @username && @password
@@ -109,6 +124,7 @@ class TwitterStream
     else
       request.oauth!(http, @consumer, @access)
     end
+    http.start
 
     begin
       http.request(request) do |response|
